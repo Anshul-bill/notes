@@ -1,26 +1,44 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
+@plugin "@tailwindcss/typography";
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-sidebar: var(--sidebar);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  /* Modern Light Mode (Soft Gray, not blinding white) */
+  --background: #f8fafc; /* Slate-50 */
+  --foreground: #0f172a; /* Slate-900 */
+  --sidebar: #ffffff;
+  --border: #e2e8f0;     /* Slate-200 */
+  --accent: #2563eb;     /* Blue-600 */
+  --accent-hover: #1d4ed8;
+}
+
+.dark {
+  /* Modern Dark Mode (Deep Navy, matching your reference) */
+  --background: #020617; /* Slate-950 (Deepest Navy) */
+  --foreground: #f8fafc; /* Slate-50 */
+  --sidebar: #0f172a;    /* Slate-900 */
+  --border: #1e293b;     /* Slate-800 */
+  --accent: #3b82f6;     /* Blue-500 (Brighter for dark mode) */
+  --accent-hover: #60a5fa;
+  caret-color: white;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* This adds the subtle "Spotlight" gradient effect from your reference */
+  background-image: radial-gradient(circle at 50% 0%, var(--border) 0%, transparent 70%);
+  background-attachment: fixed; /* Keeps gradient in place when scrolling */
+}
+/* Hide native password reveal button in Edge/IE */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
 }
