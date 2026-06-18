@@ -33,25 +33,28 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => { isEncryptedRef.current = isEncrypted; }, [isEncrypted]);
 
   // Helper: Update Sidebar (Now includes Tags!)
-  const updateSidebarImmediate = (newTitle: string, newTags: string[], newContent?: string) => {
-    type SidebarNote = { id: string; title?: string; tags?: string[]; date?: string | Date; text?: string };
+  type SidebarNote = { id: string; title?: string; tags?: string[]; date?: string | Date; text?: string; isPinned?: boolean; isEncrypted?: boolean };
+  // Upsert this note into the sidebar list: update if present, otherwise add it
+  // (so any note you OPEN — incl. a shared link — shows up). `enc` overrides the
+  // encrypted flag for newly added entries (state isn't settled yet on first load).
+  const updateSidebarImmediate = (newTitle: string, newTags: string[], newContent?: string, enc?: boolean) => {
+    const encrypted = enc ?? isEncrypted;
     const existingNotes: SidebarNote[] = JSON.parse(localStorage.getItem('my-notes') || '[]');
     // Plaintext snippet for sidebar content search — never stored for encrypted notes.
-    const snippet = (!isEncrypted && newContent != null)
+    const snippet = (!encrypted && newContent != null)
       ? newContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500)
       : undefined;
-    const updatedNotes = existingNotes.map((note) => {
-      if (note.id === id) {
-        return {
-          ...note,
-          title: newTitle || 'Untitled Note',
-          tags: newTags, // 👈 Sync tags to sidebar
-          date: new Date(),
-          ...(snippet !== undefined ? { text: snippet } : {}),
-        };
-      }
-      return note;
-    });
+    const has = existingNotes.some((n) => n.id === id);
+    const updatedNotes = has
+      ? existingNotes.map((note) =>
+          note.id === id
+            ? { ...note, title: newTitle || 'Untitled Note', tags: newTags, date: new Date(), ...(snippet !== undefined ? { text: snippet } : {}) }
+            : note
+        )
+      : [
+          { id, title: newTitle || 'Untitled Note', tags: newTags, date: new Date(), isPinned: false, isEncrypted: encrypted, ...(snippet !== undefined ? { text: snippet } : {}) },
+          ...existingNotes,
+        ];
     localStorage.setItem('my-notes', JSON.stringify(updatedNotes));
     window.dispatchEvent(new Event('storage'));
   };
@@ -95,12 +98,14 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
             setTitle(json.data.title);
             // We can load tags even if locked, usually safe, or hide them if you prefer
             setTags(json.data.tags || []); 
-            noteData.current = { 
-                title: json.data.title, 
+            noteData.current = {
+                title: json.data.title,
                 content: json.data.content,
                 tags: json.data.tags || []
             };
             setStatus('Locked');
+            // Register a shared/opened encrypted note in the sidebar (no content snippet).
+            updateSidebarImmediate(json.data.title || '', json.data.tags || [], undefined, true);
           } else {
             const loadedTitle = json.data.title || '';
             const loadedContent = json.data.content || '';
