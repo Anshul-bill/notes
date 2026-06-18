@@ -3,11 +3,12 @@ import dbConnect from '@/lib/db';
 import Note from '@/models/Note';
 
 export async function POST() {
-  await dbConnect();
-  
-  // Create a blank note in the database
-  const newNote = await Note.create({});
-  
-  // Send the new ID back to the frontend (so we can redirect the user)
-  return NextResponse.json({ success: true, urlId: newNote.urlId });
+  try {
+    await dbConnect();
+    const newNote = await Note.create({});
+    return NextResponse.json({ success: true, urlId: newNote.urlId });
+  } catch (e) {
+    const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
 }
