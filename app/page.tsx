@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import CursorFX from '@/components/CursorFX';
 
 export default function Home() {
   const router = useRouter();
@@ -14,37 +15,46 @@ export default function Home() {
       if (data.success) {
         router.push(`/${data.urlId}`);
       }
-    } catch (error) {
-      alert('Failed to create note');
+    } catch {
+      alert('Could not create a note. Check your connection and try again.');
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
-      {/* Glow Effect behind the text */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
-
-      <h1 className="text-6xl font-extrabold mb-6 tracking-tight relative z-10">
-        Share<span className="text-accent">Notes</span>
+    <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      <CursorFX />
+      <h1 className="text-6xl sm:text-7xl lg:text-8xl font-extrabold tracking-[-0.03em] leading-[0.95] max-w-4xl text-balance">
+        Write it{' '}
+        {/* Signature: highlighter-marker swipe that draws in on load */}
+        <span className="relative inline-block">
+          <span
+            aria-hidden
+            className="absolute inset-x-[-0.1em] top-[0.16em] bottom-[0.12em] z-0 -rotate-2 rounded-[3px] bg-accent motion-safe:[animation:marker-draw_0.6s_cubic-bezier(0.22,1,0.36,1)_0.25s_both]"
+          />
+          <span className="relative z-[1] text-accent-ink">down.</span>
+        </span>
+        <br />
+        Share the link.
       </h1>
-      <p className="text-gray-400 mb-10 text-xl max-w-lg relative z-10">
-        Capture ideas, auto-save instantly, and share with a secure link.
+
+      <p className="text-lg sm:text-xl text-muted mt-8 max-w-md leading-relaxed">
+        An open page that saves as you type, locks behind a password when you
+        need it, and travels as a single link.
       </p>
-      
-      <button 
+
+      <button
         onClick={createNote}
         disabled={loading}
-        className="relative z-10 px-8 py-4 bg-accent text-white text-lg font-semibold rounded-full hover:bg-accent-hover transition-all transform hover:scale-105 shadow-xl shadow-blue-500/20 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-3"
+        className="group mt-11 inline-flex items-center gap-2.5 rounded-md bg-accent px-8 py-4 text-lg font-bold text-accent-ink transition-[transform,background-color] duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
       >
-        {loading ? (
-          'Creating...'
-        ) : (
-          <>
-            + Create New Note
-          </>
-        )}
+        {loading ? 'Creating…' : 'Start a new note'}
+        <span aria-hidden className="transition-transform group-hover:translate-x-1">→</span>
       </button>
+
+      <p className="font-mono text-[11px] uppercase tracking-wider text-muted mt-5">
+        No sign-up · Opens instantly
+      </p>
     </div>
   );
 }

@@ -11,7 +11,7 @@ export const decryptNote = (cipherText: string, password: string) => {
     const bytes = CryptoJS.AES.decrypt(cipherText, password);
     const originalText = bytes.toString(CryptoJS.enc.Utf8);
     return originalText;
-  } catch (e) {
+  } catch {
     return null; // Failed to decrypt
   }
 };

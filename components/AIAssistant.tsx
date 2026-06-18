@@ -1,45 +1,78 @@
 'use client';
 import { useState } from 'react';
-import { X, Sparkles, Tag, Languages, CheckCircle, Bot } from 'lucide-react';
+import { X, Sparkles, Tag, Languages, CheckCircle, Bot, Type, Wand2, PenLine, MessageCircle } from 'lucide-react';
+
+interface GrammarIssue {
+  original: string;
+  suggestion: string;
+}
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   content: string;
+  onTagsGenerated?: (tags: string[]) => void;
+  onTitleGenerated?: (title: string) => void;
+  onContentChange?: (html: string) => void;
 }
 
-export default function AIAssistant({ isOpen, onClose, content }: Props) {
+// Wrap plain AI text as HTML so it slots into the TipTap editor (blank lines -> paragraphs).
+const textToHtml = (t: string) =>
+  '<p>' + t.trim().replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+
+// Shared styles (Inkwell: ink + single red-pen accent, mono labels)
+const card = 'rounded-lg border border-border bg-background p-4';
+const cardTitle = 'flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-foreground';
+const chip = 'flex h-7 w-7 items-center justify-center rounded-md bg-accent/10 text-accent-strong';
+const ghostBtn = 'rounded-md border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent-strong disabled:opacity-50';
+const fillBtn = 'rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover';
+const result = 'font-sans text-sm leading-relaxed text-foreground/90';
+
+export default function AIAssistant({ isOpen, onClose, content, onTagsGenerated, onTitleGenerated, onContentChange }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
-  
+
   // State
   const [summary, setSummary] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  // Glossary state removed
   const [translation, setTranslation] = useState('');
-  const [grammar, setGrammar] = useState<{issues: any[]} | null>(null);
+  const [grammar, setGrammar] = useState<{ issues: GrammarIssue[] } | null>(null);
   const [targetLang, setTargetLang] = useState('Spanish');
+  const [genTitle, setGenTitle] = useState('');
+  const [improved, setImproved] = useState('');
+  const [continuation, setContinuation] = useState('');
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
 
   const handleAction = async (action: string) => {
     setLoading(action);
     try {
-      const plainText = content.replace(/<[^>]*>?/gm, ''); 
+      const plainText = content.replace(/<[^>]*>?/gm, '');
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, text: plainText, language: targetLang }),
+        body: JSON.stringify({ action, text: plainText, language: targetLang, question }),
       });
       const json = await res.json();
-      
+
       if (json.success) {
         if (action === 'summary') setSummary(json.data);
-        if (action === 'tags') setTags(json.data);
-        // Glossary action logic removed
+        if (action === 'tags') {
+          const newTags = Array.isArray(json.data) ? json.data : [];
+          setTags(newTags);
+          onTagsGenerated?.(newTags); // bubble up so the note saves them
+        }
         if (action === 'translate') setTranslation(json.data);
         if (action === 'grammar') setGrammar(json.data);
+        if (action === 'title') { setGenTitle(json.data); onTitleGenerated?.(json.data); }
+        if (action === 'improve') setImproved(json.data);
+        if (action === 'continue') setContinuation(json.data);
+        if (action === 'ask') setAnswer(json.data);
+      } else if (json.error) {
+        alert(json.error);
       }
     } catch (e) {
       console.error(e);
-      alert('AI Request failed');
+      alert('AI request failed');
     } finally {
       setLoading(null);
     }
@@ -49,162 +82,172 @@ export default function AIAssistant({ isOpen, onClose, content }: Props) {
     <>
       {/* Backdrop */}
       {isOpen && (
-        <div 
-          onClick={onClose}
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity"
-        />
+        <div data-no-print onClick={onClose} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity" />
       )}
 
       {/* Sidebar Panel */}
-      <div className={`
-          fixed right-0 top-0 h-full w-96 
-          transform transition-transform duration-300 z-50 overflow-y-auto
-          border-l border-gray-200 dark:border-slate-700 shadow-2xl
-          /* LIGHT MODE: Darker Gray BG so white cards pop */
-          bg-slate-100 
-          /* DARK MODE: Deep Blue/Slate */
-          dark:bg-slate-900 
-          ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-      `}>
-        
-        {/* Header (Sticky & Blurred) */}
-        <div className="p-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center 
-          sticky top-0 z-10 backdrop-blur-md
-          bg-white/80 dark:bg-slate-900/80">
-          <h2 className="font-bold text-lg flex items-center gap-2 text-blue-600 dark:text-blue-400">
-            <Bot size={24} /> AI Assistant
+      <div
+        data-no-print
+        className={`fixed right-0 top-0 h-full w-96 z-50 overflow-y-auto border-l border-border bg-sidebar shadow-2xl transform transition-transform duration-300 ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-sidebar/90 px-4 py-3 backdrop-blur-md">
+          <h2 className="flex items-center gap-2 font-sans text-base font-bold text-foreground">
+            <Bot size={20} className="text-accent-strong" /> AI assistant
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition text-gray-500">
+          <button onClick={onClose} className="rounded-md p-1.5 text-muted transition-colors hover:text-foreground hover:bg-foreground/[0.06]">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-5 space-y-6">
-          
-          {/* 1. SUMMARY CARD */}
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-semibold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-                <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
-                  <Sparkles size={16}/>
-                </div>
-                Summary
-              </h3>
-              <button 
-                onClick={() => handleAction('summary')}
-                disabled={loading === 'summary'}
-                className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 px-3 py-1.5 rounded-full font-medium transition"
-              >
-                {loading === 'summary' ? 'Writing...' : 'Generate'}
+        <div className="space-y-4 p-4">
+          {/* Summary */}
+          <div className={card}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className={cardTitle}><span className={chip}><Sparkles size={15} /></span> Summary</h3>
+              <button onClick={() => handleAction('summary')} disabled={loading === 'summary'} className={ghostBtn}>
+                {loading === 'summary' ? 'Writing…' : 'Generate'}
               </button>
             </div>
-            {summary && <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed animate-in fade-in slide-in-from-bottom-2">{summary}</p>}
+            {summary && <p className={result}>{summary}</p>}
           </div>
 
-          {/* 2. TAGS CARD */}
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-semibold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-                <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
-                  <Tag size={16}/>
-                </div>
-                Tags
-              </h3>
-              <button 
-                 onClick={() => handleAction('tags')}
-                 disabled={loading === 'tags'}
-                 className="text-xs bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-300 px-3 py-1.5 rounded-full font-medium transition"
-              >
-                {loading === 'tags' ? 'Finding...' : 'Generate'}
+          {/* Tags */}
+          <div className={card}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className={cardTitle}><span className={chip}><Tag size={15} /></span> Tags</h3>
+              <button onClick={() => handleAction('tags')} disabled={loading === 'tags'} className={ghostBtn}>
+                {loading === 'tags' ? 'Finding…' : 'Generate'}
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag, i) => (
-                <span key={i} className="text-xs font-medium bg-gray-100 dark:bg-slate-700 px-2.5 py-1 rounded-md text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-slate-600 animate-in zoom-in duration-300">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* GLOSSARY CARD REMOVED HERE */}
-
-          {/* 3. TRANSLATION CARD (Formerly 4) */}
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
-            <div className="flex justify-between items-center mb-3">
-               <h3 className="font-semibold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-                <div className="p-1.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-orange-600 dark:text-orange-400">
-                  <Languages size={16}/>
-                </div>
-                Translate
-              </h3>
-            </div>
-            <div className="flex gap-2 mb-3">
-              <select 
-                value={targetLang}
-                onChange={(e) => setTargetLang(e.target.value)}
-                className="
-                  flex-1 text-xs p-2 rounded-lg outline-none
-                  border border-gray-200 dark:border-slate-600 
-                  bg-gray-50 dark:bg-slate-900 
-                  focus:ring-2 focus:ring-orange-500/20
-                  
-                  /* FORCE TEXT COLORS */
-                  text-gray-900 dark:text-gray-100
-                "
-              >
-                {/* We explicitly style options to prevent the 'invisible text' bug */}
-                <option value="Spanish" className="text-black bg-white dark:text-white dark:bg-slate-900">Spanish</option>
-                <option value="French" className="text-black bg-white dark:text-white dark:bg-slate-900">French</option>
-                <option value="German" className="text-black bg-white dark:text-white dark:bg-slate-900">German</option>
-                <option value="Japanese" className="text-black bg-white dark:text-white dark:bg-slate-900">Japanese</option>
-                <option value="Hindi" className="text-black bg-white dark:text-white dark:bg-slate-900">Hindi</option>
-              </select>
-              <button 
-                 onClick={() => handleAction('translate')}
-                 disabled={loading === 'translate'}
-                 className="text-xs bg-orange-50 text-orange-600 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300 px-4 py-2 rounded-lg font-medium transition"
-              >
-                Go
-              </button>
-            </div>
-            {translation && (
-              <div className="p-3 bg-orange-50 dark:bg-slate-900/50 rounded-lg border border-orange-100 dark:border-slate-700 text-sm italic text-gray-700 dark:text-gray-300 animate-in fade-in">
-                "{translation}"
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map((tag, i) => (
+                  <span key={i} className="font-mono text-[11px] px-2 py-0.5 rounded-sm bg-foreground/[0.06] text-muted">#{tag}</span>
+                ))}
               </div>
             )}
           </div>
 
-          {/* 4. GRAMMAR CARD (Formerly 5) */}
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md mb-20">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-semibold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-                <div className="p-1.5 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400">
-                  <CheckCircle size={16}/>
-                </div>
-                Grammar
-              </h3>
-              <button 
-                 onClick={() => handleAction('grammar')}
-                 disabled={loading === 'grammar'}
-                 className="text-xs bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 px-3 py-1.5 rounded-full font-medium transition"
-              >
-                Check
+          {/* Title */}
+          <div className={card}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className={cardTitle}><span className={chip}><Type size={15} /></span> Title</h3>
+              <button onClick={() => handleAction('title')} disabled={loading === 'title'} className={ghostBtn}>
+                {loading === 'title' ? 'Thinking…' : 'Generate'}
               </button>
             </div>
-            <div className="space-y-3">
-              {grammar?.issues.map((issue, i) => (
-                 <div key={i} className="text-sm flex flex-col gap-1 bg-red-50 dark:bg-red-900/10 p-3 rounded-lg border border-red-100 dark:border-red-900/30 animate-in fade-in">
-                    <div className="text-red-500 line-through text-xs opacity-70">{issue.original}</div>
-                    <div className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
-                      <span className="text-xs">➜</span> {issue.suggestion}
-                    </div>
-                 </div>
-              ))}
-              {grammar?.issues.length === 0 && <p className="text-green-600 bg-green-50 dark:bg-green-900/20 p-2 rounded text-xs text-center border border-green-100 dark:border-green-900/30">Everything looks correct! 🎉</p>}
-            </div>
+            {genTitle && <p className={result}>Applied: <span className="font-sans font-semibold">{genTitle}</span></p>}
           </div>
 
+          {/* Improve */}
+          <div className={card}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className={cardTitle}><span className={chip}><Wand2 size={15} /></span> Improve writing</h3>
+              <button onClick={() => handleAction('improve')} disabled={loading === 'improve'} className={ghostBtn}>
+                {loading === 'improve' ? 'Improving…' : 'Improve'}
+              </button>
+            </div>
+            {improved && (
+              <div className="space-y-2">
+                <p className={`${result} max-h-40 overflow-y-auto whitespace-pre-wrap`}>{improved}</p>
+                <button onClick={() => { onContentChange?.(textToHtml(improved)); setImproved(''); }} className={fillBtn}>
+                  Replace note with this
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Continue */}
+          <div className={card}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className={cardTitle}><span className={chip}><PenLine size={15} /></span> Continue writing</h3>
+              <button onClick={() => handleAction('continue')} disabled={loading === 'continue'} className={ghostBtn}>
+                {loading === 'continue' ? 'Writing…' : 'Continue'}
+              </button>
+            </div>
+            {continuation && (
+              <div className="space-y-2">
+                <p className={`${result} max-h-40 overflow-y-auto whitespace-pre-wrap`}>{continuation}</p>
+                <button onClick={() => { onContentChange?.(content + textToHtml(continuation)); setContinuation(''); }} className={fillBtn}>
+                  Append to note
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Ask */}
+          <div className={card}>
+            <div className="mb-3">
+              <h3 className={cardTitle}><span className={chip}><MessageCircle size={15} /></span> Ask about this note</h3>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAction('ask'); }}
+                placeholder="Ask a question…"
+                className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
+              />
+              <button onClick={() => handleAction('ask')} disabled={loading === 'ask'} className={fillBtn}>
+                {loading === 'ask' ? '…' : 'Ask'}
+              </button>
+            </div>
+            {answer && <p className={`${result} mt-3`}>{answer}</p>}
+          </div>
+
+          {/* Translate */}
+          <div className={card}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className={cardTitle}><span className={chip}><Languages size={15} /></span> Translate</h3>
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={targetLang}
+                onChange={(e) => setTargetLang(e.target.value)}
+                className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-accent"
+              >
+                <option value="Spanish">Spanish</option>
+                <option value="French">French</option>
+                <option value="German">German</option>
+                <option value="Japanese">Japanese</option>
+                <option value="Hindi">Hindi</option>
+              </select>
+              <button onClick={() => handleAction('translate')} disabled={loading === 'translate'} className={fillBtn}>
+                {loading === 'translate' ? '…' : 'Go'}
+              </button>
+            </div>
+            {translation && (
+              <p className="mt-3 rounded-md border border-border bg-foreground/[0.03] p-3 font-sans text-sm italic text-foreground/90">
+                &ldquo;{translation}&rdquo;
+              </p>
+            )}
+          </div>
+
+          {/* Grammar */}
+          <div className={`${card} mb-20`}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className={cardTitle}><span className={chip}><CheckCircle size={15} /></span> Grammar</h3>
+              <button onClick={() => handleAction('grammar')} disabled={loading === 'grammar'} className={ghostBtn}>
+                {loading === 'grammar' ? 'Checking…' : 'Check'}
+              </button>
+            </div>
+            <div className="space-y-2">
+              {grammar?.issues.map((issue, i) => (
+                <div key={i} className="rounded-md border border-border bg-foreground/[0.03] p-2.5 text-sm">
+                  <div className="font-sans text-muted line-through">{issue.original}</div>
+                  <div className="mt-0.5 flex items-start gap-1 font-sans text-foreground">
+                    <span className="text-accent-strong">➜</span> {issue.suggestion}
+                  </div>
+                </div>
+              ))}
+              {grammar?.issues.length === 0 && (
+                <p className="font-mono text-xs text-muted">No issues found.</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </>

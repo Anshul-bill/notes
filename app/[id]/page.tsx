@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, use } from 'react';
 import NoteEditor from '@/components/NoteEditor';
-import { Lock, Unlock, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react'; // <--- Changed Bot to Sparkles
+import { Lock, Unlock, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react';
 import { decryptNote, encryptNote } from '@/lib/crypto';
 import AIAssistant from '@/components/AIAssistant';
 
@@ -11,6 +11,8 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
   // State
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  // 👇 NEW: Tags State
+  const [tags, setTags] = useState<string[]>([]);
   const [status, setStatus] = useState('Loading...');
   
   // AI Sidebar State
@@ -23,16 +25,30 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
   const [showPassword, setShowPassword] = useState(false); 
   const sessionPassword = useRef<string | null>(null);
 
-  // REFS for Auto-Save
-  const noteData = useRef({ title: '', content: '' });
-  const isDirty = useRef(false); 
+  // REFS for Auto-Save (Include tags here)
+  const noteData = useRef({ title: '', content: '', tags: [] as string[] });
+  const isDirty = useRef(false);
+  // Mirror isEncrypted so the unmount flush re-encrypts correctly (avoids stale closure)
+  const isEncryptedRef = useRef(isEncrypted);
+  useEffect(() => { isEncryptedRef.current = isEncrypted; }, [isEncrypted]);
 
-  // Helper: Update Sidebar
-  const updateSidebarImmediate = (newTitle: string) => {
-    const existingNotes = JSON.parse(localStorage.getItem('my-notes') || '[]');
-    const updatedNotes = existingNotes.map((note: any) => {
+  // Helper: Update Sidebar (Now includes Tags!)
+  const updateSidebarImmediate = (newTitle: string, newTags: string[], newContent?: string) => {
+    type SidebarNote = { id: string; title?: string; tags?: string[]; date?: string | Date; text?: string };
+    const existingNotes: SidebarNote[] = JSON.parse(localStorage.getItem('my-notes') || '[]');
+    // Plaintext snippet for sidebar content search — never stored for encrypted notes.
+    const snippet = (!isEncrypted && newContent != null)
+      ? newContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500)
+      : undefined;
+    const updatedNotes = existingNotes.map((note) => {
       if (note.id === id) {
-        return { ...note, title: newTitle || 'Untitled Note', date: new Date() };
+        return {
+          ...note,
+          title: newTitle || 'Untitled Note',
+          tags: newTags, // 👈 Sync tags to sidebar
+          date: new Date(),
+          ...(snippet !== undefined ? { text: snippet } : {}),
+        };
       }
       return note;
     });
@@ -41,10 +57,10 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
   };
 
   // Helper: Save to DB
-  const saveToDb = async (data: { title: string, content: string }, force = false) => {
+  const saveToDb = async (data: { title: string, content: string, tags: string[] }, force = false) => {
     try {
       let finalContent = data.content;
-      if (isEncrypted && sessionPassword.current) {
+      if (isEncryptedRef.current && sessionPassword.current) {
          finalContent = encryptNote(data.content, sessionPassword.current);
       }
 
@@ -53,7 +69,8 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             title: data.title, 
-            content: finalContent 
+            content: finalContent,
+            tags: data.tags // 👈 Send tags to API
         }),
         keepalive: true, 
       });
@@ -76,47 +93,69 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
             setIsEncrypted(true);
             setIsLocked(true); 
             setTitle(json.data.title);
-            noteData.current = { title: json.data.title, content: json.data.content };
+            // We can load tags even if locked, usually safe, or hide them if you prefer
+            setTags(json.data.tags || []); 
+            noteData.current = { 
+                title: json.data.title, 
+                content: json.data.content,
+                tags: json.data.tags || []
+            };
             setStatus('Locked');
           } else {
             const loadedTitle = json.data.title || '';
             const loadedContent = json.data.content || '';
+            const loadedTags = json.data.tags || [];
+
             setTitle(loadedTitle);
             setContent(loadedContent);
-            noteData.current = { title: loadedTitle, content: loadedContent };
+            setTags(loadedTags);
+
+            noteData.current = { title: loadedTitle, content: loadedContent, tags: loadedTags };
             setStatus('Saved');
-            updateSidebarImmediate(loadedTitle);
+            updateSidebarImmediate(loadedTitle, loadedTags, loadedContent);
           }
         } else {
           setStatus('Note not found');
         }
-      } catch (e) {
+      } catch {
         setStatus('Error loading');
       }
     };
     fetchNote();
   }, [id]);
 
-  // 2. Auto-Save Logic
+  // 2. Auto-Save Logic (debounced — save 1s after the last edit)
   useEffect(() => {
     if (status === 'Loading...' || status === 'Locked') return;
 
-    noteData.current = { title, content };
+    noteData.current = { title, content, tags };
     isDirty.current = true;
     setStatus('Saving...');
 
     const timeoutId = setTimeout(() => {
       saveToDb(noteData.current);
+      updateSidebarImmediate(title, tags, content); // refresh sidebar title/tags/search-snippet
       isDirty.current = false;
     }, 1000);
 
+    // Only clear the timer here — flushing on every keystroke defeated the debounce.
+    return () => clearTimeout(timeoutId);
+  }, [title, content, tags, id]); // 👈 Added tags dependency
+
+  // Flush any pending edit when leaving the page (covers navigating away mid-debounce)
+  useEffect(() => {
     return () => {
-      clearTimeout(timeoutId);
-      if (isDirty.current) {
-        saveToDb(noteData.current, true);
-      }
+      if (isDirty.current) saveToDb(noteData.current, true);
     };
-  }, [title, content, id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle AI Tags Generation
+  const handleTagsGenerated = (newTags: string[]) => {
+    setTags(newTags);
+    // Immediate update to UI and Sidebar
+    updateSidebarImmediate(title, newTags, content);
+  };
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,24 +174,48 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
 
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
-    alert('Link copied!');
+    alert('Edit link copied!');
+  };
+
+  const copyViewLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/view/${id}`);
+    alert('View-only link copied!');
   };
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground transition-colors duration-300 overflow-hidden relative">
       
       {/* Navbar */}
-      <nav className="p-4 border-b border-border flex justify-between items-center bg-background/80 backdrop-blur-md z-20">
-        <div className="text-sm font-semibold text-gray-500 flex items-center gap-2">
-           Status: <span className={status === 'Saved' ? 'text-green-500' : 'text-orange-400'}>{status}</span>
-           {isEncrypted && <Lock size={14} className="text-yellow-500"/>}
+      <nav data-no-print className="px-5 py-3 border-b border-border flex justify-between items-center bg-background/80 backdrop-blur-md z-20">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted">
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${status === 'Saved' ? 'bg-muted' : 'bg-accent animate-pulse'}`} />
+            {status}
+            {isEncrypted && <Lock size={12} className="text-accent-strong" />}
+          </div>
+          {tags.length > 0 && (
+            <div className="hidden sm:flex gap-1.5 min-w-0 overflow-hidden">
+              {tags.map(t => (
+                <span key={t} className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-foreground/[0.06] text-muted whitespace-nowrap">#{t}</span>
+              ))}
+            </div>
+          )}
         </div>
-        <button 
-          onClick={copyLink}
-          className="bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-full text-sm font-medium transition shadow-lg shadow-blue-500/20"
-        >
-          Share Link
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={copyViewLink}
+            className="rounded-md border border-border hover:border-accent hover:text-accent-strong text-foreground px-3.5 py-1.5 text-sm font-medium transition-colors"
+            title="Anyone with this link can view but not edit"
+          >
+            View-only
+          </button>
+          <button
+            onClick={copyLink}
+            className="rounded-md bg-accent hover:bg-accent-hover text-accent-ink px-3.5 py-1.5 text-sm font-semibold transition-[transform,background-color] duration-150 active:scale-[0.97]"
+          >
+            Share link
+          </button>
+        </div>
       </nav>
 
       <div className="flex-1 overflow-y-auto relative z-10 flex flex-col">
@@ -167,17 +230,12 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
          {/* LOCK SCREEN */}
          {isLocked ? (
             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
-                <div className="
-                    !bg-white dark:!bg-slate-800 
-                    !text-black dark:!text-white
-                    p-8 rounded-2xl shadow-xl max-w-sm w-full 
-                    border border-gray-200 dark:border-slate-700
-                ">
-                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500">
+                <div className="!bg-sidebar !text-foreground p-8 rounded-xl shadow-xl max-w-sm w-full border border-border">
+                    <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6 text-accent-strong">
                         <Lock size={32} />
                     </div>
-                    <h2 className="text-2xl font-bold mb-2">Note Locked</h2>
-                    <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
+                    <h2 className="text-2xl font-bold mb-2">Note locked</h2>
+                    <p className="text-muted mb-6 text-sm">
                         This note is encrypted. Enter the password to view and edit.
                     </p>
                     
@@ -189,11 +247,9 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
                                 placeholder="Enter Password"
                                 value={passwordInput}
                                 onChange={(e) => setPasswordInput(e.target.value)}
-                                className="w-full px-4 py-3 pr-10 rounded-lg outline-none transition-all
-                                border border-gray-300 dark:border-slate-700 
-                                focus:ring-2 focus:ring-blue-500 
-                                !bg-gray-50 !text-black
-                                dark:!bg-slate-900 dark:!text-white"
+                                className="w-full px-4 py-3 pr-10 rounded-md outline-none transition
+                                border border-border focus:border-accent focus:ring-2 focus:ring-accent/30
+                                bg-background text-foreground"
                             />
                             <button
                                 type="button"
@@ -203,11 +259,11 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
                                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                         </div>
-                        <button 
+                        <button
                             type="submit"
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            className="w-full bg-accent hover:bg-accent-hover text-accent-ink font-medium py-3 rounded-md transition-colors flex items-center justify-center gap-2"
                         >
-                            <Unlock size={18} /> Unlock Note
+                            <Unlock size={18} /> Unlock note
                         </button>
                     </form>
                 </div>
@@ -218,23 +274,24 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
                 title={title}
                 content={content} 
                 onChange={(data) => {
-                setTitle(data.title);
-                setContent(data.content);
-                if (data.title !== title) updateSidebarImmediate(data.title);
+                    setTitle(data.title);
+                    setContent(data.content);
+                    // Pass current tags so they don't get lost on title change
+                    if (data.title !== title) updateSidebarImmediate(data.title, tags, data.content);
                 }} 
             />
             )
          )}
       </div>
 
-      {/* --- AI ASSISTANT BUTTON (Updated Icon) --- */}
+      {/* --- AI ASSISTANT BUTTON --- */}
       {!isLocked && status !== 'Loading...' && (
         <button
+          data-no-print
           onClick={() => setIsAIOpen(true)}
-          className="fixed bottom-8 right-8 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-2xl z-30 transition-all hover:scale-110 flex items-center justify-center group"
+          className="fixed bottom-8 right-8 bg-accent hover:bg-accent-hover text-accent-ink p-4 rounded-full shadow-2xl z-30 transition-all hover:scale-110 flex items-center justify-center group"
           title="Ask AI"
         >
-           {/* REPLACED BOT WITH SPARKLES */}
            <Sparkles size={24} className="group-hover:animate-pulse" />
            
            <span className="absolute right-full mr-3 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
@@ -244,10 +301,14 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {/* Sidebar Component */}
-      <AIAssistant 
-        isOpen={isAIOpen} 
-        onClose={() => setIsAIOpen(false)} 
-        content={content} 
+      <AIAssistant
+        isOpen={isAIOpen}
+        onClose={() => setIsAIOpen(false)}
+        content={content}
+        // 👇 The magic link: Catch tags from AI and save them
+        onTagsGenerated={handleTagsGenerated}
+        onTitleGenerated={(t) => { setTitle(t); updateSidebarImmediate(t, tags, content); }}
+        onContentChange={(html) => setContent(html)}
       />
       
     </div>

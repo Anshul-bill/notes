@@ -26,9 +26,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   
   // We construct the update object dynamically
   // This allows us to update JUST 'isPinned' without overwriting title/content if we want
-  const updateData: any = {};
+  const updateData: Record<string, unknown> = {};
   if (body.title !== undefined) updateData.title = body.title;
   if (body.content !== undefined) updateData.content = body.content;
+  if (body.tags !== undefined) updateData.tags = body.tags; // <--- Persist tags
   if (body.isPinned !== undefined) updateData.isPinned = body.isPinned; // <--- Handle Pin
   if (body.isEncrypted !== undefined) updateData.isEncrypted = body.isEncrypted;
 

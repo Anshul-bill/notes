@@ -5,7 +5,7 @@ import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import EditorToolbar from './EditorToolbar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface Props {
   title: string;
@@ -14,6 +14,11 @@ interface Props {
 }
 
 export default function NoteEditor({ title, content, onChange }: Props) {
+  // useEditor's onUpdate closure is created once; read the latest title via a ref
+  // so editing the body doesn't revert a freshly-typed title.
+  const titleRef = useRef(title);
+  useEffect(() => { titleRef.current = title; }, [title]);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -31,7 +36,7 @@ export default function NoteEditor({ title, content, onChange }: Props) {
       },
     },
     onUpdate: ({ editor }) => {
-      onChange({ title, content: editor.getHTML() });
+      onChange({ title: titleRef.current, content: editor.getHTML() });
     },
   });
 
@@ -41,12 +46,16 @@ export default function NoteEditor({ title, content, onChange }: Props) {
     }
   }, [content, editor]);
 
+  // Live word/char count, derived from content (updates as the parent re-renders on edit).
+  const plain = content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = plain ? plain.split(' ').length : 0;
+
   return (
     <div className="flex flex-col w-full mx-auto min-h-screen bg-background pb-20">
-      
+
       {/* TOOLBAR */}
-      <EditorToolbar editor={editor} />
-      
+      <EditorToolbar editor={editor} title={title} />
+
       <div className="max-w-4xl mx-auto w-full mt-6">
          {/* TITLE INPUT */}
         <input 
@@ -64,6 +73,11 @@ export default function NoteEditor({ title, content, onChange }: Props) {
         {/* We also force the color here to ensure the text body is visible */}
         <div style={{ color: 'var(--foreground)' }}>
             <EditorContent editor={editor} />
+        </div>
+
+        {/* WORD COUNT */}
+        <div data-no-print className="px-4 mt-6 font-mono text-[11px] uppercase tracking-wider text-muted">
+          {words} {words === 1 ? 'word' : 'words'} · {plain.length} characters
         </div>
       </div>
     </div>

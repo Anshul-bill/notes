@@ -2,14 +2,22 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { 
-  Plus, Search, Pin, Trash2, Lock, 
-  Moon, Sun, LayoutPanelLeft 
-} from 'lucide-react';
+import { Plus, Search, Pin, Trash2, Lock, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { encryptNote, decryptNote } from '@/lib/crypto'; // Import helpers
+import Logo from './Logo';
 
-function getMyNotes() {
+interface NoteItem {
+  id: string;
+  title: string;
+  date: string | Date;
+  isPinned: boolean;
+  isEncrypted: boolean;
+  tags?: string[];
+  text?: string; // plaintext snippet for content search (omitted for encrypted notes)
+}
+
+function getMyNotes(): NoteItem[] {
   if (typeof window === 'undefined') return [];
   const saved = localStorage.getItem('my-notes');
   return saved ? JSON.parse(saved) : [];
@@ -19,12 +27,16 @@ export default function Sidebar() {
   const router = useRouter();
   const params = useParams();
   const { theme, setTheme } = useTheme();
-  
+
   const [mounted, setMounted] = useState(false);
-  const [notes, setNotes] = useState<any[]>([]);
+  const [notes, setNotes] = useState<NoteItem[]>([]);
   const [search, setSearch] = useState('');
+  const [activeTag, setActiveTag] = useState<string | null>(null);
 
   useEffect(() => {
+    // Hydration guard: localStorage and theme are client-only, so we read them
+    // after mount to avoid SSR/client mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     setNotes(getMyNotes());
     const handleStorageChange = () => setNotes(getMyNotes());
@@ -39,7 +51,7 @@ export default function Sidebar() {
       const newHistory = [{ id: data.urlId, title: 'Untitled Note', date: new Date(), isPinned: false, isEncrypted: false }, ...notes];
       localStorage.setItem('my-notes', JSON.stringify(newHistory));
       setNotes(newHistory);
-      setSearch(''); 
+      setSearch('');
       router.push(`/${data.urlId}`);
       window.dispatchEvent(new Event('storage'));
     }
@@ -69,8 +81,8 @@ export default function Sidebar() {
     });
   };
 
-  // --- NEW: HANDLE LOCKING ---
-  const handleLock = async (e: React.MouseEvent, note: any) => {
+  // --- HANDLE LOCKING ---
+  const handleLock = async (e: React.MouseEvent, note: NoteItem) => {
     e.preventDefault(); e.stopPropagation();
 
     // 1. IF NOTE IS ALREADY ENCRYPTED (Unlock it)
@@ -79,12 +91,11 @@ export default function Sidebar() {
       if (!password) return;
 
       // We need to fetch the ACTUAL content from DB to decrypt it
-      // (Sidebar usually doesn't have the full content body for performance)
       const res = await fetch(`/api/${note.id}`);
       const json = await res.json();
-      
+
       const decrypted = decryptNote(json.data.content, password);
-      
+
       if (!decrypted && decrypted !== "") {
         alert("Wrong password!");
         return;
@@ -96,13 +107,11 @@ export default function Sidebar() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: decrypted, isEncrypted: false }),
       });
-      
-      // Update UI
+
       const updatedNotes = notes.map(n => n.id === note.id ? { ...n, isEncrypted: false } : n);
       setNotes(updatedNotes);
       localStorage.setItem('my-notes', JSON.stringify(updatedNotes));
       window.dispatchEvent(new Event('storage'));
-      // Reload page to show content
       if (params?.id === note.id) window.location.reload();
 
     } else {
@@ -110,104 +119,158 @@ export default function Sidebar() {
       const password = prompt("Set a password for this note:");
       if (!password) return;
 
-      // Fetch current content to encrypt
       const res = await fetch(`/api/${note.id}`);
       const json = await res.json();
 
       const encrypted = encryptNote(json.data.content || "", password);
 
-      // Save encrypted version
       await fetch(`/api/${note.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: encrypted, isEncrypted: true }),
       });
 
-      // Update UI
       const updatedNotes = notes.map(n => n.id === note.id ? { ...n, isEncrypted: true } : n);
       setNotes(updatedNotes);
       localStorage.setItem('my-notes', JSON.stringify(updatedNotes));
       window.dispatchEvent(new Event('storage'));
-      // Reload page to hide content
       if (params?.id === note.id) window.location.reload();
     }
   };
-  // ---------------------------
+
+  const allTags = [...new Set(notes.flatMap((n) => n.tags || []))];
 
   const filteredNotes = notes
-    .filter((n) => n.title?.toLowerCase().includes(search.toLowerCase()))
+    .filter((n) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !q || n.title?.toLowerCase().includes(q) || n.text?.toLowerCase().includes(q);
+      const matchesTag = !activeTag || (n.tags || []).includes(activeTag);
+      return matchesSearch && matchesTag;
+    })
     .sort((a, b) => (a.isPinned === b.isPinned ? 0 : a.isPinned ? -1 : 1));
 
   if (!mounted) return null;
 
+  const iconBtn = 'p-1.5 rounded text-muted transition-colors hover:text-accent-strong';
+
   return (
-    <aside className="w-64 h-screen flex flex-col transition-all duration-300 border-r border-border bg-sidebar/80 backdrop-blur-xl">
-      <div className="p-4 border-b border-border/50">
-        <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-          <LayoutPanelLeft className="w-5 h-5 text-blue-500" /> QuickNote
+    <aside className="w-64 h-screen flex flex-col border-r border-border bg-sidebar/85 backdrop-blur-xl">
+      {/* Wordmark */}
+      <div className="px-4 py-4 border-b border-border/70">
+        <h2 className="flex items-center gap-2 font-sans text-xl font-extrabold tracking-tight text-foreground">
+          <Logo size={22} className="text-foreground" />
+          ShareNotes
         </h2>
       </div>
 
-      <div className="p-4 space-y-3">
-        <button onClick={handleCreate} className="w-full bg-accent hover:bg-accent-hover text-white font-medium py-2.5 px-4 rounded-full flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/20"><Plus size={18} /> New Note</button>
+      <div className="p-3 space-y-3">
+        <button
+          onClick={handleCreate}
+          className="w-full rounded-md bg-accent hover:bg-accent-hover text-accent-ink text-sm font-semibold py-2.5 px-4 flex items-center justify-center gap-2 transition-[transform,background-color] duration-150 active:scale-[0.98]"
+        >
+          <Plus size={16} /> New note
+        </button>
+
         <div className="relative group">
-          <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4 group-focus-within:text-accent transition-colors" />
-          <input type="text" placeholder="Search notes..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full text-sm py-2 pl-9 pr-3 rounded-md transition-all duration-200 outline-none border border-transparent focus:border-accent !bg-gray-100 !text-black placeholder:text-gray-500 dark:!bg-slate-800 dark:!text-white dark:placeholder:text-gray-400 focus:!bg-white dark:focus:!bg-slate-900 shadow-sm" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted group-focus-within:text-accent-strong transition-colors" />
+          <input
+            type="text"
+            placeholder="Search title & text…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full text-sm py-2 pl-9 pr-3 rounded-md outline-none bg-background/60 text-foreground border border-border focus:border-accent placeholder:text-muted transition-colors"
+          />
         </div>
+
+        {/* Tag filter chips */}
+        {allTags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                className={`font-mono text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-sm border transition-colors ${
+                  activeTag === tag
+                    ? 'bg-accent text-accent-ink border-accent'
+                    : 'text-muted border-border hover:border-accent hover:text-accent-strong'
+                }`}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
         {filteredNotes.length === 0 ? (
-          <p className="text-center text-gray-500 text-sm mt-10">No notes found</p>
+          <p className="text-center font-mono text-xs text-muted mt-10">No notes yet</p>
         ) : (
           filteredNotes.map((note) => {
             const isActive = params?.id === note.id;
             return (
-              <div key={note.id} className={`group relative flex items-center p-2 rounded-md transition mb-1 cursor-pointer ${isActive ? 'bg-accent shadow-md shadow-blue-500/20' : 'hover:bg-black/5 dark:hover:bg-white/10'}`}>
-                <Link href={`/${note.id}`} className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                     <div className="font-bold truncate pr-6 flex-1" style={{ color: isActive ? '#ffffff' : 'var(--foreground)' }}>
-                      {/* If Encrypted, maybe hide Title or show lock symbol? For now, we keep title visible */}
-                      {note.isEncrypted ? "🔒 " + (note.title || 'Encrypted') : (note.title || 'Untitled Note')}
-                    </div>
-                    {note.isPinned && <Pin size={12} className={isActive ? "text-white fill-white" : "text-blue-500 fill-blue-500"} />}
+              <div
+                key={note.id}
+                className={`group relative rounded-md px-3 py-2 mb-0.5 transition-colors cursor-pointer ${
+                  isActive
+                    ? 'bg-accent/12 dark:bg-accent/15'
+                    : 'hover:bg-foreground/[0.04]'
+                }`}
+              >
+                <Link href={`/${note.id}`} className="block min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    {note.isEncrypted && <Lock size={12} className="shrink-0 text-accent-strong" />}
+                    <span className="font-sans font-semibold text-sm truncate text-foreground pr-6">
+                      {note.title || (note.isEncrypted ? 'Encrypted note' : 'Untitled note')}
+                    </span>
+                    {note.isPinned && <Pin size={11} className="shrink-0 text-accent-strong fill-accent-strong ml-auto" />}
                   </div>
-                  <div className={`text-xs font-medium ${isActive ? 'text-blue-100' : 'text-gray-500'}`}>
-                     {new Date(note.date).toLocaleDateString()}
-                  </div>
-                </Link>
-                
-                <div className={`hidden group-hover:flex items-center gap-1 absolute right-2 pl-2 rounded shadow-sm ${isActive ? 'bg-accent' : 'bg-gray-100 dark:bg-slate-800'}`}>
-                  
-                  <button onClick={(e) => togglePin(e, note.id, note.isPinned)} title={note.isPinned ? "Unpin" : "Pin"} className={`p-1.5 transition ${isActive ? 'text-white hover:text-white/80' : note.isPinned ? 'text-blue-500' : 'text-gray-500 hover:text-blue-500'}`}>
-                    <Pin size={14} className={note.isPinned ? "fill-current" : ""} />
-                  </button>
 
-                  {/* LOCK BUTTON */}
-                  <button 
-                    onClick={(e) => handleLock(e, note)}
-                    title={note.isEncrypted ? "Unlock Note" : "Encrypt Note"} 
-                    className={`p-1.5 transition ${
-                        isActive ? 'text-white hover:text-white/80' : 'text-gray-500 hover:text-yellow-500'
-                    }`}
-                  >
-                    {/* If Encrypted: Show Locked Icon (Filled or Active Color). If not: Open Lock */}
-                    <Lock size={14} className={note.isEncrypted ? "text-yellow-500 fill-yellow-500" : ""} />
+                  <div className="font-mono text-[10px] uppercase tracking-wide text-muted mt-0.5">
+                    {new Date(note.date).toLocaleDateString()}
+                  </div>
+
+                  {note.tags && note.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {note.tags.slice(0, 3).map((tag: string, i: number) => (
+                        <span key={i} className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-foreground/[0.06] text-muted">
+                          #{tag}
+                        </span>
+                      ))}
+                      {note.tags.length > 3 && (
+                        <span className="font-mono text-[10px] text-muted">+{note.tags.length - 3}</span>
+                      )}
+                    </div>
+                  )}
+                </Link>
+
+                <div className="hidden group-hover:flex items-center gap-0.5 absolute right-1.5 top-1.5 rounded-md border border-border bg-sidebar/95 backdrop-blur px-0.5 shadow-sm">
+                  <button onClick={(e) => togglePin(e, note.id, note.isPinned)} title={note.isPinned ? 'Unpin' : 'Pin'} className={iconBtn}>
+                    <Pin size={14} className={note.isPinned ? 'fill-current text-accent-strong' : ''} />
                   </button>
-                  
-                  <button onClick={(e) => deleteNote(e, note.id)} title="Delete" className={`p-1.5 transition ${isActive ? 'text-white hover:text-red-200' : 'text-gray-500 hover:text-red-500'}`}>
+                  <button onClick={(e) => handleLock(e, note)} title={note.isEncrypted ? 'Unlock note' : 'Encrypt note'} className={iconBtn}>
+                    <Lock size={14} className={note.isEncrypted ? 'text-accent-strong' : ''} />
+                  </button>
+                  <button onClick={(e) => deleteNote(e, note.id)} title="Delete" className={iconBtn}>
                     <Trash2 size={14} />
                   </button>
-
                 </div>
               </div>
             );
           })
         )}
       </div>
-      <div className="p-4 border-t border-border/50 flex justify-between items-center">
-        <span className="text-xs text-gray-500">v2.0.0</span>
-        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition" style={{ color: 'var(--foreground)' }}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
+
+      <div className="px-4 py-3 border-t border-border/70 flex justify-between items-center">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted">v2.0</span>
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          title="Toggle theme"
+          className="p-2 rounded-md text-muted hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
       </div>
     </aside>
   );
