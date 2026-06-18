@@ -69,7 +69,7 @@ export default function ViewNote({ params }: { params: Promise<{ id: string }> }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-4xl mx-auto w-full px-6 py-10">
+      <div className="max-w-4xl mx-auto w-full px-6 pt-16 md:pt-10 pb-10">
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted mb-6">
           <Eye size={14} /> Read-only
         </div>

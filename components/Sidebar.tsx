@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { Plus, Search, Pin, Trash2, Lock, Moon, Sun } from 'lucide-react';
+import { Plus, Search, Pin, Trash2, Lock, Moon, Sun, Menu, X } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { encryptNote, decryptNote } from '@/lib/crypto'; // Import helpers
 import Logo from './Logo';
@@ -32,6 +32,7 @@ export default function Sidebar() {
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [search, setSearch] = useState('');
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [open, setOpen] = useState(false); // mobile drawer
 
   useEffect(() => {
     // Hydration guard: localStorage and theme are client-only, so we read them
@@ -52,6 +53,7 @@ export default function Sidebar() {
       localStorage.setItem('my-notes', JSON.stringify(newHistory));
       setNotes(newHistory);
       setSearch('');
+      setOpen(false);
       router.push(`/${data.urlId}`);
       window.dispatchEvent(new Event('storage'));
     }
@@ -155,13 +157,37 @@ export default function Sidebar() {
   const iconBtn = 'p-1.5 rounded text-muted transition-colors hover:text-accent-strong';
 
   return (
-    <aside className="w-64 h-screen flex flex-col border-r border-border bg-sidebar/85 backdrop-blur-xl">
+    <>
+      {/* Mobile hamburger (hidden once the drawer is open / on desktop) */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Open menu"
+          className="fixed top-3 left-3 z-30 md:hidden rounded-md border border-border bg-sidebar/90 backdrop-blur p-2 text-foreground"
+        >
+          <Menu size={18} />
+        </button>
+      )}
+
+      {/* Mobile backdrop */}
+      {open && (
+        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setOpen(false)} aria-hidden />
+      )}
+
+      <aside
+        className={`fixed top-0 left-0 z-50 h-screen w-72 flex flex-col border-r border-border bg-sidebar backdrop-blur-xl transition-transform duration-300 md:static md:z-auto md:w-64 md:translate-x-0 md:bg-sidebar/85 ${
+          open ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
       {/* Wordmark */}
-      <div className="px-4 py-4 border-b border-border/70">
+      <div className="px-4 py-4 border-b border-border/70 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-sans text-xl font-extrabold tracking-tight text-foreground">
           <Logo size={22} className="text-foreground" />
           ShareNotes
         </h2>
+        <button onClick={() => setOpen(false)} aria-label="Close menu" className="md:hidden p-1 text-muted hover:text-foreground">
+          <X size={18} />
+        </button>
       </div>
 
       <div className="p-3 space-y-3">
@@ -218,7 +244,7 @@ export default function Sidebar() {
                     : 'hover:bg-foreground/[0.04]'
                 }`}
               >
-                <Link href={`/${note.id}`} className="block min-w-0">
+                <Link href={`/${note.id}`} onClick={() => setOpen(false)} className="block min-w-0">
                   <div className="flex items-center gap-1.5">
                     {note.isEncrypted && <Lock size={12} className="shrink-0 text-accent-strong" />}
                     <span className="font-sans font-semibold text-sm truncate text-foreground pr-6">
@@ -272,6 +298,7 @@ export default function Sidebar() {
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

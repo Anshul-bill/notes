@@ -88,7 +88,7 @@ export default function AIAssistant({ isOpen, onClose, content, onTagsGenerated,
       {/* Sidebar Panel */}
       <div
         data-no-print
-        className={`fixed right-0 top-0 h-full w-96 z-50 overflow-y-auto border-l border-border bg-sidebar shadow-2xl transform transition-transform duration-300 ${
+        className={`fixed right-0 top-0 h-full w-full sm:w-96 z-50 overflow-y-auto border-l border-border bg-sidebar shadow-2xl transform transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >

@@ -29,7 +29,7 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
       <CursorFX />
-      <h1 className="text-6xl sm:text-7xl lg:text-8xl font-extrabold tracking-[-0.03em] leading-[0.95] max-w-4xl text-balance">
+      <h1 className="text-4xl sm:text-6xl lg:text-8xl font-extrabold tracking-[-0.03em] leading-[1.02] sm:leading-[0.95] max-w-4xl text-balance">
         Write it{' '}
         {/* Signature: highlighter-marker swipe that draws in on load */}
         <span className="relative inline-block">

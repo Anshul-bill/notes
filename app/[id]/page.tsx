@@ -191,7 +191,7 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
     <div className="flex flex-col h-screen bg-background text-foreground transition-colors duration-300 overflow-hidden relative">
       
       {/* Navbar */}
-      <nav data-no-print className="px-5 py-3 border-b border-border flex justify-between items-center bg-background/80 backdrop-blur-md z-20">
+      <nav data-no-print className="pl-16 md:pl-5 pr-4 md:pr-5 py-3 border-b border-border flex justify-between items-center gap-2 bg-background/80 backdrop-blur-md z-20">
         <div className="flex items-center gap-4 min-w-0">
           <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted">
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${status === 'Saved' ? 'bg-muted' : 'bg-accent animate-pulse'}`} />
@@ -209,14 +209,14 @@ export default function NotePage({ params }: { params: Promise<{ id: string }> }
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={copyViewLink}
-            className="rounded-md border border-border hover:border-accent hover:text-accent-strong text-foreground px-3.5 py-1.5 text-sm font-medium transition-colors"
+            className="rounded-md border border-border hover:border-accent hover:text-accent-strong text-foreground px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
             title="Anyone with this link can view but not edit"
           >
             View-only
           </button>
           <button
             onClick={copyLink}
-            className="rounded-md bg-accent hover:bg-accent-hover text-accent-ink px-3.5 py-1.5 text-sm font-semibold transition-[transform,background-color] duration-150 active:scale-[0.97]"
+            className="rounded-md bg-accent hover:bg-accent-hover text-accent-ink px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-[transform,background-color] duration-150 active:scale-[0.97] whitespace-nowrap"
           >
             Share link
           </button>

@@ -39,6 +39,10 @@ yarn-error.log*
 # local AI tooling / skills / plans (not part of the app)
 .claude/
 
+# local project docs (not pushed)
+document/
+docs/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
