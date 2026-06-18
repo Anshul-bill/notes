@@ -13,6 +13,11 @@ export default function Home() {
       const res = await fetch('/api/create', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
+        // Add to the sidebar list (localStorage) — same as the sidebar's "New note".
+        const existing = JSON.parse(localStorage.getItem('my-notes') || '[]');
+        const entry = { id: data.urlId, title: 'Untitled Note', date: new Date(), isPinned: false, isEncrypted: false };
+        localStorage.setItem('my-notes', JSON.stringify([entry, ...existing]));
+        window.dispatchEvent(new Event('storage'));
         router.push(`/${data.urlId}`);
       }
     } catch {
