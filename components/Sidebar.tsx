@@ -154,7 +154,9 @@ export default function Sidebar() {
 
   if (!mounted) return null;
 
-  const iconBtn = 'p-2 md:p-1.5 rounded text-muted transition-colors hover:text-accent-strong';
+  // base: bigger tap target; on desktop start muted, color appears on hover.
+  // on mobile (no hover) each button keeps its semantic color always.
+  const actBtn = 'p-2 md:p-1.5 rounded transition-colors md:text-muted';
 
   return (
     <>
@@ -272,13 +274,13 @@ export default function Sidebar() {
                 </Link>
 
                 <div className="flex md:hidden md:group-hover:flex items-center gap-0.5 absolute right-1.5 top-1.5 rounded-md border border-border bg-sidebar/95 backdrop-blur px-0.5 shadow-sm">
-                  <button onClick={(e) => togglePin(e, note.id, note.isPinned)} title={note.isPinned ? 'Unpin' : 'Pin'} className={iconBtn}>
-                    <Pin size={14} className={note.isPinned ? 'fill-current text-accent-strong' : ''} />
+                  <button onClick={(e) => togglePin(e, note.id, note.isPinned)} title={note.isPinned ? 'Unpin' : 'Pin'} className={`${actBtn} text-green-500 md:hover:text-green-500`}>
+                    <Pin size={14} className={note.isPinned ? 'fill-current' : ''} />
                   </button>
-                  <button onClick={(e) => handleLock(e, note)} title={note.isEncrypted ? 'Unlock note' : 'Encrypt note'} className={iconBtn}>
-                    <Lock size={14} className={note.isEncrypted ? 'text-accent-strong' : ''} />
+                  <button onClick={(e) => handleLock(e, note)} title={note.isEncrypted ? 'Unlock note' : 'Encrypt note'} className={`${actBtn} text-yellow-600 md:hover:text-yellow-600`}>
+                    <Lock size={14} className={note.isEncrypted ? 'fill-current' : ''} />
                   </button>
-                  <button onClick={(e) => deleteNote(e, note.id)} title="Delete" className={iconBtn}>
+                  <button onClick={(e) => deleteNote(e, note.id)} title="Delete" className={`${actBtn} text-red-500 md:hover:text-red-500`}>
                     <Trash2 size={14} />
                   </button>
                 </div>
