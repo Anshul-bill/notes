@@ -154,7 +154,7 @@ export default function Sidebar() {
 
   if (!mounted) return null;
 
-  const iconBtn = 'p-1.5 rounded text-muted transition-colors hover:text-accent-strong';
+  const iconBtn = 'p-2 md:p-1.5 rounded text-muted transition-colors hover:text-accent-strong';
 
   return (
     <>
@@ -244,7 +244,7 @@ export default function Sidebar() {
                     : 'hover:bg-foreground/[0.04]'
                 }`}
               >
-                <Link href={`/${note.id}`} onClick={() => setOpen(false)} className="block min-w-0">
+                <Link href={`/${note.id}`} onClick={() => setOpen(false)} className="block min-w-0 pr-20 md:pr-0">
                   <div className="flex items-center gap-1.5">
                     {note.isEncrypted && <Lock size={12} className="shrink-0 text-accent-strong" />}
                     <span className="font-sans font-semibold text-sm truncate text-foreground pr-6">
@@ -271,7 +271,7 @@ export default function Sidebar() {
                   )}
                 </Link>
 
-                <div className="hidden group-hover:flex items-center gap-0.5 absolute right-1.5 top-1.5 rounded-md border border-border bg-sidebar/95 backdrop-blur px-0.5 shadow-sm">
+                <div className="flex md:hidden md:group-hover:flex items-center gap-0.5 absolute right-1.5 top-1.5 rounded-md border border-border bg-sidebar/95 backdrop-blur px-0.5 shadow-sm">
                   <button onClick={(e) => togglePin(e, note.id, note.isPinned)} title={note.isPinned ? 'Unpin' : 'Pin'} className={iconBtn}>
                     <Pin size={14} className={note.isPinned ? 'fill-current text-accent-strong' : ''} />
                   </button>
